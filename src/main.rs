@@ -14,7 +14,7 @@ pub fn main() -> iced::Result {
             ..Default::default()
         })
         .default_font(Font::with_name("黑体-简"))
-        .window_size(Size::new(1080.0, 410.0)) // 调整窗口大小
+        .window_size(Size::new(1080.0, 410.0))
         .run()
 }
 
