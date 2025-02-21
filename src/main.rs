@@ -1,3 +1,6 @@
+#![windows_subsystem = "windows"]
+
+use iced::alignment::Horizontal;
 use iced::font::{Family, Weight};
 use iced::widget::{Column, Container, Row, button, text, text_input};
 use iced::{Color, Element, Font, Renderer, Task, Theme};
@@ -7,13 +10,12 @@ use bitvec::prelude::*;
 
 pub fn main() -> iced::Result {
     iced::application("位操作器", Bit64::update, Bit64::view)
-        .font(include_bytes!("../fonts/SourceHanSansCN-Normal.otf").as_slice())
+        .font(include_bytes!("../fonts/LXGWWenKai-Regular.ttf").as_slice())
         .default_font(Font {
-            family: Family::Name("思源黑体"),
+            family: Family::Name("霞鹜文楷"),
             weight: Weight::Normal,
             ..Default::default()
         })
-        .default_font(Font::with_name("黑体-简"))
         .window_size(Size::new(1080.0, 410.0))
         .run()
 }
@@ -27,6 +29,7 @@ struct Bit64 {
     oct: String,
     bin: String,
     size: String,
+    size_input: String, // 新增：存储正在输入的数据大小
 }
 
 impl Default for Bit64 {
@@ -39,12 +42,14 @@ impl Default for Bit64 {
             oct: String::new(),
             bin: String::new(),
             size: String::from("0 B"),
+            size_input: String::from("0 B"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 enum BitOps {
+    None,
     Toggled(u8, u8),
     ShiftLeft(u32),            // 修改为包含位移数
     ShiftRight(u32),           // 修改为包含位移数
@@ -53,6 +58,7 @@ enum BitOps {
     DecChanged(String),        // 新增
     OctChanged(String),        // 新增
     BinChanged(String),        // 新增
+    DataSizeChanged(String),   // 新增
 }
 
 impl Bit64 {
@@ -117,7 +123,12 @@ impl Bit64 {
             .push(make_data_row("二进制:", "Bin", &self.bin, |s| {
                 Some(BitOps::BinChanged(s))
             }))
-            .push(make_data_row("数据大小:", "Size", &self.size, |_| None));
+            .push(make_data_row(
+                "数据大小:",
+                "Size",
+                &self.size_input,
+                |s| Some(BitOps::DataSizeChanged(s)),
+            ));
 
         let content = Row::new()
             .spacing(5)
@@ -133,6 +144,7 @@ impl Bit64 {
 
     fn update(&mut self, message: BitOps) -> Task<BitOps> {
         match message {
+            BitOps::None => Task::none(),
             BitOps::Toggled(i, j) => {
                 // 计算实际的位索引：
                 // i 是从下到上的行号（0-3）
@@ -160,18 +172,16 @@ impl Bit64 {
                 Task::none()
             }
             BitOps::HexChanged(value) => {
-                println!("十六进制输入值：{}", value);
                 match parse_number(&value, 16) {
                     Some(num) => {
                         self.data = num;
                         self.update_displays();
-                        Task::none()
                     }
                     None => {
                         self.update_displays_default();
-                        return Task::none();
                     }
                 }
+                Task::none()
             }
             BitOps::DecChanged(value) => {
                 match parse_number(&value, 10) {
@@ -181,32 +191,45 @@ impl Bit64 {
                     }
                     None => {
                         self.update_displays_default();
-                        return Task::none();
                     }
                 }
                 Task::none()
             }
-            BitOps::OctChanged(value) => match parse_number(&value, 8) {
-                Some(num) => {
-                    self.data = num;
-                    Task::none()
+            BitOps::OctChanged(value) => {
+                match parse_number(&value, 8) {
+                    Some(num) => {
+                        self.data = num;
+                        self.update_displays();
+                    }
+                    None => {
+                        self.update_displays_default();
+                    }
                 }
-                None => {
+                Task::none()
+            }
+            BitOps::BinChanged(value) => {
+                match parse_number(&value, 2) {
+                    Some(num) => {
+                        self.data = num;
+                        self.update_displays();
+                    }
+                    None => {
+                        self.update_displays_default();
+                    }
+                }
+                Task::none()
+            }
+            BitOps::DataSizeChanged(value) => {
+                self.size_input = value.clone();
+                if value.is_empty() {
                     self.update_displays_default();
-                    return Task::none();
-                }
-            },
-            BitOps::BinChanged(value) => match parse_number(&value, 2) {
-                Some(num) => {
-                    self.data = num;
+                } else if let Some(bytes) = parse_data_size(&value) {
+                    self.data = bytes;
                     self.update_displays();
-                    Task::none()
+                    self.size_input = self.size.clone(); // 更新为格式化后的显示
                 }
-                None => {
-                    self.update_displays_default();
-                    return Task::none();
-                }
-            },
+                Task::none()
+            }
         }
     }
 
@@ -218,6 +241,7 @@ impl Bit64 {
         self.oct = format!("{:o}", self.data);
         self.bin = format!("{:b}", self.data);
         self.size = data_size(self.data);
+        self.size_input = self.size.clone(); // 同步 size_input
     }
 
     fn update_displays_default(&mut self) {
@@ -236,6 +260,63 @@ impl Bit64 {
             .unwrap_or(1) // 如果解析失败，默认移动1位
             .min(64) // 限制最大移动位数为64
     }
+}
+
+fn parse_data_size(s: &str) -> Option<u64> {
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut total: u64 = 0;
+    let s = s.to_uppercase();
+    let mut chars = s.chars();
+    let mut num_buffer = String::new();
+
+    let mut prev_was_unit = true; // 确保开始时是数字
+
+    while let Some(c) = chars.next() {
+        if c.is_ascii_whitespace() {
+            continue;
+        }
+
+        if c.is_ascii_digit() {
+            if !prev_was_unit {
+                return None; // 单位后面必须是空格或数字
+            }
+            num_buffer.push(c);
+            continue;
+        }
+
+        // 处理单位字符
+        if matches!(c, 'B' | 'K' | 'M' | 'G' | 'T') {
+            if num_buffer.is_empty() {
+                return None; // 单位前必须有数字
+            }
+
+            let num: u64 = num_buffer.parse().ok()?;
+            let bytes = match c {
+                'B' => num,
+                'K' => num.checked_mul(1024)?,
+                'M' => num.checked_mul(1024 * 1024)?,
+                'G' => num.checked_mul(1024 * 1024 * 1024)?,
+                'T' => num.checked_mul(1024 * 1024 * 1024 * 1024)?,
+                _ => return None,
+            };
+
+            total = total.checked_add(bytes)?;
+            num_buffer.clear();
+            prev_was_unit = true;
+            continue;
+        }
+
+        return None; // 遇到非法字符
+    }
+
+    if !num_buffer.is_empty() {
+        return None; // 有未处理完的数字
+    }
+
+    Some(total)
 }
 
 // 改进数字解析函数
@@ -285,7 +366,7 @@ where
             text_input(placeholder, value)
                 .padding(10)
                 .width(Length::Fixed(300.))
-                .on_input(move |s| on_change(s.clone()).unwrap_or(BitOps::ExpressionChanged(s))),
+                .on_input(move |s| on_change(s.clone()).unwrap_or(BitOps::None)),
         )
 }
 
@@ -300,9 +381,27 @@ fn item(bit: &str, i: usize, j: usize) -> Column<'_, BitOps, Theme, Renderer> {
 
     Column::new()
         .spacing(5)
+        .align_x(Horizontal::Center)
         .push(text(index.to_string()).center().color(txt_color))
         .push(
-            button(text(bit).width(Length::Fill).center().color(txt_color))
+            button(text(bit).width(Length::Fill).center())
+                .style(move |_theme, _status| {
+                    if bit == "1" {
+                        button::Style {
+                            background: Some(iced::Background::Color(Color::from_rgb8(
+                                229, 22, 22, //rgb(43, 187, 227)
+                            ))),
+                            ..Default::default()
+                        }
+                    } else {
+                        button::Style {
+                            background: Some(iced::Background::Color(Color::from_rgb8(
+                                43, 187, 227,
+                            ))),
+                            ..Default::default()
+                        }
+                    }
+                })
                 .on_press(BitOps::Toggled(i as u8, j as u8)),
         )
 }
@@ -368,7 +467,37 @@ fn data_size(data: u64) -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::data_size;
+    use crate::{data_size, parse_data_size};
+
+    #[test]
+    fn test_parse_data_size() {
+        // 基本格式测试
+        assert_eq!(parse_data_size("7B"), Some(7));
+        assert_eq!(parse_data_size("1K"), Some(1024));
+        assert_eq!(parse_data_size("2K"), Some(2048));
+
+        // 空格分隔的格式
+        assert_eq!(parse_data_size("1K 512B"), Some(1536));
+        assert_eq!(parse_data_size("1M 12B"), Some(1024 * 1024 + 12));
+        assert_eq!(
+            parse_data_size("1G 1K 1B"),
+            Some(1024 * 1024 * 1024 + 1024 + 1)
+        );
+
+        // 无空格分隔的格式
+        assert_eq!(parse_data_size("1K1B"), Some(1025));
+        assert_eq!(parse_data_size("1M1K"), Some(1024 * 1024 + 1024));
+        assert_eq!(
+            parse_data_size("1G1M1K1B"),
+            Some(1024 * 1024 * 1024 + 1024 * 1024 + 1024 + 1)
+        );
+
+        // 错误情况
+        assert_eq!(parse_data_size(""), None);
+        assert_eq!(parse_data_size("invalid"), None);
+        assert_eq!(parse_data_size("123X"), None); // 无效单位
+        assert_eq!(parse_data_size("1KB"), None); // 单位之间缺少数字
+    }
 
     #[test]
     fn test_data_size() {
