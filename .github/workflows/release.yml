@@ -30,7 +30,7 @@ jobs:
         id: git-cliff
         with:
           config: cliff.toml
-          args: --verbose
+          args: --latest --no-exec --github-repo ${{ github.repository }}
         env:
           OUTPUT: CHANGELOG.md
 
@@ -64,7 +64,7 @@ jobs:
           files: |
             ${{env.PROJECT_NAME}}_${{matrix.target}}.exe
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
-          body_path: ${{ steps.git-cliff.outputs.content }}
+          body_path: CHANGELOG.md
           generate_release_notes: true
           token: ${{ secrets.TOKEN }}
 
@@ -91,7 +91,7 @@ jobs:
         id: git-cliff
         with:
           config: cliff.toml
-          args: --verbose
+          args: --latest --no-exec --github-repo ${{ github.repository }}
         env:
           OUTPUT: CHANGELOG.md
 
@@ -129,7 +129,7 @@ jobs:
           files: |
             ${{env.PROJECT_NAME}}_${{matrix.target}}
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
-          body_path: ${{ steps.git-cliff.outputs.content }}
+          body_path: CHANGELOG.md
           generate_release_notes: true
           token: ${{ secrets.TOKEN }}
 
@@ -156,7 +156,7 @@ jobs:
         id: git-cliff
         with:
           config: cliff.toml
-          args: --verbose
+          args: --latest --no-exec --github-repo ${{ github.repository }}
         env:
           OUTPUT: CHANGELOG.md
 
@@ -189,6 +189,6 @@ jobs:
           files: |
             ${{env.PROJECT_NAME}}_${{matrix.target}}
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
-          body_path: ${{ steps.git-cliff.outputs.content }}
+          body_path: CHANGELOG.md
           generate_release_notes: true
           token: ${{ secrets.TOKEN }}
