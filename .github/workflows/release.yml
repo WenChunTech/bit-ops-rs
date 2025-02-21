@@ -5,7 +5,7 @@ on:
     tags:
       - "**"
 env:
-  PROJECT_NAME: smt
+  PROJECT_NAME: bit-ops-rs
 
 jobs:
   windows:
